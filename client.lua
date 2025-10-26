@@ -7,7 +7,7 @@ AddEventHandler('gameEventTriggered', function(event, args)
     if victim == PlayerPedId() then
         if GetEntityHealth(victim) <= 0 then
             SetTimeout(300, function()
-                TriggerServerEvent('custom:clientReportedDeath')
+                TriggerServerEvent('somis-betterevents:clientReportedDeath')
             end)
         end
     end

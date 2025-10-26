@@ -44,7 +44,7 @@ RegisterNetEvent('weaponDamageEvent', function(sender, data)
     TriggerEvent('somis-betterevents:death', victimId, killerId, weapon)
 end)
 
-RegisterNetEvent('custom:clientReportedDeath', function()
+RegisterNetEvent('somis-betterevents:clientReportedDeath', function()
     local victimId = source
     if not isPlayerDead(victimId) then return end
     local currentTime = GetGameTimer()
