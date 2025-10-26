@@ -1,74 +1,74 @@
 local DEBUG = false
-
+local serv_cooldown_death = {}
+local cooldown_duration_death = 500
 local recentDeaths = {}
 local playerVehicleStates = {}
 local playerPedModels = {}
 local playerPeds = {}
 local joined_players = {}
- function isentityped(entity)
-    return GetEntityType(entity) == 1
- end
 
- function IsPlayerDead(playerId)
+local function debugPrint(msg)
+    if DEBUG then
+        print(msg)
+    end
+end
+
+local function isEntityPed(entity)
+    return GetEntityType(entity) == 1
+end
+
+local function isPlayerDead(playerId)
     local ped = playerPeds[playerId] or GetPlayerPed(playerId)
     if not playerId or not ped then return false end
     if not DoesEntityExist(ped) then return false end
-    local health = GetEntityHealth(ped)
-    return health <= 0
+    return GetEntityHealth(ped) <= 0
 end
 
-AddEventHandler('weaponDamageEvent', function(sender, data)
+RegisterNetEvent('weaponDamageEvent', function(sender, data)
     if not data.willKill then return end
 
     local entity = NetworkGetEntityFromNetworkId(data.hitGlobalId)
-    if not DoesEntityExist(entity) or not isentityped(entity) or not IsPedAPlayer(entity) then return end
-
+    if not DoesEntityExist(entity) or not isEntityPed(entity) or not IsPedAPlayer(entity) then return end
     local victimId = NetworkGetEntityOwner(entity)
+    local now = GetGameTimer()
+    if serv_cooldown_death[victimId] and now < serv_cooldown_death[victimId] then
+        return
+    end
+    serv_cooldown_death[victimId] = now + cooldown_duration_death
+
+    
     local killerId = sender or "Unknown"
     local weapon = data.weaponType or "Unknown"
-if DEBUG then
-    print(("[Death] Player %s killed by %s with %s (Server)"):format(victimId, killerId, weapon))
-end
+    debugPrint(("[Death] Player %s killed by %s with %s (Server)"):format(victimId, killerId, weapon))
     recentDeaths[victimId] = GetGameTimer()
     TriggerEvent('somis-betterevents:death', victimId, killerId, weapon)
 end)
 
-RegisterNetEvent('custom:clientReportedDeath')
-AddEventHandler('custom:clientReportedDeath', function()
+RegisterNetEvent('custom:clientReportedDeath', function()
     local victimId = source
-    if not IsPlayerDead(victimId) then
-        return
-    end
+    if not isPlayerDead(victimId) then return end
     local currentTime = GetGameTimer()
     local lastDeath = recentDeaths[victimId] or 0
 
     if currentTime - lastDeath > 1000 then
-        if DEBUG then
-        print(("[Death] Player %s died (Client)"):format(victimId))
-        end
+        debugPrint(("[Death] Player %s died (Client)"):format(victimId))
         recentDeaths[victimId] = currentTime
         TriggerEvent('somis-betterevents:death', victimId, nil, nil)
     end
 end)
 
-
-AddEventHandler('playerJoining', function()
+RegisterNetEvent('playerJoining', function()
     local playerId = source
-    table.insert(joined_players, playerId)
-    if DEBUG then
-        local playerName = GetPlayerName(playerId)
-    print(string.format("[PLAYER JOINED] Player %s (ID: %d) added to joined_players", playerName, playerId))
-    end
+    joined_players[#joined_players + 1] = playerId
+    debugPrint(("[PLAYER JOINED] Player %s (ID: %d) added to joined_players"):format(GetPlayerName(playerId), playerId))
 end)
 
-AddEventHandler('playerDropped', function()
+RegisterNetEvent('playerDropped', function()
     local playerId = source
-    for i, id in ipairs(joined_players) do
-        if id == playerId then
-            table.remove(joined_players, i)
-            if DEBUG then
-            print(string.format("[PLAYER DROPPED] Player ID %d removed from joined_players", playerId))
-            end
+    for i = 1, #joined_players do
+        if joined_players[i] == playerId then
+            joined_players[i] = nil
+            debugPrint(("[PLAYER DROPPED] Player ID %d removed from joined_players"):format(playerId))
             break
         end
     end
@@ -77,11 +77,13 @@ AddEventHandler('playerDropped', function()
     playerPeds[playerId] = nil
 end)
 
-
-
-Citizen.CreateThread(function()
+CreateThread(function()
     while true do
-        for _, playerId in ipairs(joined_players) do
+        for i = 1, #joined_players do
+            local playerId = joined_players[i]
+            if not playerId then
+                goto continue 
+            end
             local ped = playerPeds[playerId]
             if not ped or ped == 0 or not DoesEntityExist(ped) then
                 ped = GetPlayerPed(playerId)
@@ -90,15 +92,11 @@ Citizen.CreateThread(function()
                 end
                 playerPeds[playerId] = ped
 
-
                 if not playerPedModels[playerId] then
                     playerPedModels[playerId] = GetEntityModel(ped)
-                    if DEBUG then
-                        print(("Cached ped %d for player %d with model %d"):format(ped, playerId, playerPedModels[playerId]))
-                    end
+                    debugPrint(("Cached ped %d for player %d with model %d"):format(ped, playerId, playerPedModels[playerId]))
                 end
             end
-
 
             local vehicle = GetVehiclePedIsIn(ped, false)
             local currentVehicleState = vehicle ~= 0 and vehicle or nil
@@ -106,19 +104,14 @@ Citizen.CreateThread(function()
 
             if currentVehicleState and currentVehicleState ~= previousVehicleState then
                 TriggerEvent('somis-betterevents:vehicleEntered', playerId, currentVehicleState)
-                if DEBUG then
-                    print(string.format("[VEHICLE ENTRY] Player %s (ID: %d) entered vehicle %s",
-                        GetPlayerName(playerId), playerId, currentVehicleState))
-                end
+                debugPrint(("[VEHICLE ENTRY] Player %s (ID: %d) entered vehicle %s"):format(
+                    GetPlayerName(playerId), playerId, currentVehicleState))
             elseif not currentVehicleState and previousVehicleState then
                 TriggerEvent('somis-betterevents:vehicleExit', playerId, previousVehicleState)
-                if DEBUG then
-                    print(string.format("[VEHICLE EXIT] Player %s (ID: %d) exited vehicle %s",
-                        GetPlayerName(playerId), playerId, previousVehicleState))
-                end
+                debugPrint(("[VEHICLE EXIT] Player %s (ID: %d) exited vehicle %s"):format(
+                    GetPlayerName(playerId), playerId, previousVehicleState))
             end
             playerVehicleStates[playerId] = currentVehicleState
-
 
             local model = GetEntityModel(ped)
             local prevModel = playerPedModels[playerId]
@@ -126,16 +119,14 @@ Citizen.CreateThread(function()
             if prevModel ~= model then
                 if prevModel then
                     TriggerEvent('somis-betterevents:pedModelChange', playerId, prevModel, model)
-                    if DEBUG then
-                        print(string.format("[PED MODEL CHANGE] Player %s (ID: %d) changed model: %s → %s",
-                            GetPlayerName(playerId), playerId, prevModel, model))
-                    end
+                    debugPrint(("[PED MODEL CHANGE] Player %s (ID: %d) changed model: %s → %s"):format(
+                        GetPlayerName(playerId), playerId, prevModel, model))
                 end
                 playerPedModels[playerId] = model
             end
 
             ::continue::
         end
-        Citizen.Wait(1000) 
+        Wait(500) 
     end
 end)
