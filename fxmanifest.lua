@@ -1,0 +1,7 @@
+fx_version 'cerulean'
+game 'gta5'
+lua54 'yes'
+author 'Somis https://discord.gg/EG8EES8qSw'
+description 'Events system server sided (based on baseevents)'
+server_script 'server.lua'
+client_script 'client.lua'
