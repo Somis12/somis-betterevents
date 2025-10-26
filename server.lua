@@ -10,8 +10,8 @@ local joined_players = {}
  end
 
  function IsPlayerDead(playerId)
-    if not playerId or not GetPlayerPed(playerId) then return false end
-    local ped = GetPlayerPed(playerId)
+    local ped = playerPeds[playerId] or GetPlayerPed(playerId)
+    if not playerId or not ped then return false end
     if not DoesEntityExist(ped) then return false end
     local health = GetEntityHealth(ped)
     return health <= 0
@@ -139,9 +139,3 @@ Citizen.CreateThread(function()
         Citizen.Wait(1000) 
     end
 end)
-
-
-
-function DoesP_PedExist(playerId)
-    return GetPlayerPed(playerId) ~= 0
-end
