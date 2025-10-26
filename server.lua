@@ -51,7 +51,7 @@ end)
 
 
 local joined_players = {}
-local playerVehicleStates = {}
+
 
 AddEventHandler('playerJoining', function()
     local playerId = source
@@ -75,38 +75,7 @@ AddEventHandler('playerDropped', function()
     end
     playerVehicleStates[playerId] = nil
 end)
-
-Citizen.CreateThread(function()
-    while true do
-        for _, playerId in ipairs(joined_players) do
-            if DoesP_PedExist(playerId) then
-                local ped = GetPlayerPed(playerId)
-                local vehicle = GetVehiclePedIsIn(ped, false)
-                local currentState = vehicle ~= 0 and vehicle or nil
-                local previousState = playerVehicleStates[playerId]
-                if currentState and currentState ~= previousState then
-                    local playerName = GetPlayerName(playerId)
-                    TriggerEvent('somis-betterevents:vehicleEntered', playerId, currentState)
-                    if DEBUG then
-                    print(string.format("[VEHICLE ENTRY] Player %s (ID: %d) entered vehicle %s",
-                        playerName, playerId, currentState))
-                    end
-                elseif not currentState and previousState then
-                    local playerName = GetPlayerName(playerId)
-                    TriggerEvent('somis-betterevents:vehicleExit', playerId, previousState)
-                    if DEBUG then
-                    print(string.format("[VEHICLE EXIT] Player %s (ID: %d) exited vehicle %s",
-                        playerName, playerId, previousState))
-                    end
-                    
-                end
-                playerVehicleStates[playerId] = currentState
-            end
-        end
-        Citizen.Wait(1000)
-    end
-end)
-
+local playerVehicleStates = {}
 local playerPedModels = {}
 
 Citizen.CreateThread(function()
@@ -114,20 +83,40 @@ Citizen.CreateThread(function()
         for _, playerId in ipairs(joined_players) do
             if DoesP_PedExist(playerId) then
                 local ped = GetPlayerPed(playerId)
+                local playerName = GetPlayerName(playerId)
+
+                local vehicle = GetVehiclePedIsIn(ped, false)
+                local currentVehicleState = vehicle ~= 0 and vehicle or nil
+                local previousVehicleState = playerVehicleStates[playerId]
+                
+                if currentVehicleState and currentVehicleState ~= previousVehicleState then
+                    TriggerEvent('somis-betterevents:vehicleEntered', playerId, currentVehicleState)
+                    if DEBUG then
+                        print(string.format("[VEHICLE ENTRY] Player %s (ID: %d) entered vehicle %s",
+                            playerName, playerId, currentVehicleState))
+                    end
+                elseif not currentVehicleState and previousVehicleState then
+                    TriggerEvent('somis-betterevents:vehicleExit', playerId, previousVehicleState)
+                    if DEBUG then
+                        print(string.format("[VEHICLE EXIT] Player %s (ID: %d) exited vehicle %s",
+                            playerName, playerId, previousVehicleState))
+                    end
+                end
+                playerVehicleStates[playerId] = currentVehicleState
+
                 local model = GetEntityModel(ped)
                 local prevModel = playerPedModels[playerId]
 
                 if not prevModel then
                     playerPedModels[playerId] = model
                 elseif model ~= prevModel then
-                    local playerName = GetPlayerName(playerId)
                     TriggerEvent('somis-betterevents:pedModelChange', playerId, prevModel, model)
                     if DEBUG then
-                    print(string.format(
-                        "[PED MODEL CHANGE] Player %s (ID: %d) changed model: %s → %s",
-                        playerName, playerId, prevModel, model
-                    ))
-                end
+                        print(string.format(
+                            "[PED MODEL CHANGE] Player %s (ID: %d) changed model: %s → %s",
+                            playerName, playerId, prevModel, model
+                        ))
+                    end
                     playerPedModels[playerId] = model
                 end
             end
