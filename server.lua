@@ -1,7 +1,10 @@
 local DEBUG = false
 
 local recentDeaths = {}
-
+local playerVehicleStates = {}
+local playerPedModels = {}
+local playerPeds = {}
+local joined_players = {}
  function isentityped(entity)
     return GetEntityType(entity) == 1
  end
@@ -49,15 +52,11 @@ AddEventHandler('custom:clientReportedDeath', function()
 end)
 
 
-
-local joined_players = {}
-
-
 AddEventHandler('playerJoining', function()
     local playerId = source
-    local playerName = GetPlayerName(playerId)
     table.insert(joined_players, playerId)
     if DEBUG then
+        local playerName = GetPlayerName(playerId)
     print(string.format("[PLAYER JOINED] Player %s (ID: %d) added to joined_players", playerName, playerId))
     end
 end)
@@ -74,61 +73,75 @@ AddEventHandler('playerDropped', function()
         end
     end
     playerVehicleStates[playerId] = nil
+    playerPedModels[playerId] = nil
+    playerPeds[playerId] = nil
 end)
-local playerVehicleStates = {}
-local playerPedModels = {}
+
+
 
 Citizen.CreateThread(function()
     while true do
         for _, playerId in ipairs(joined_players) do
-            if DoesP_PedExist(playerId) then
-                local ped = GetPlayerPed(playerId)
-                local playerName = GetPlayerName(playerId)
-
-                local vehicle = GetVehiclePedIsIn(ped, false)
-                local currentVehicleState = vehicle ~= 0 and vehicle or nil
-                local previousVehicleState = playerVehicleStates[playerId]
-                
-                if currentVehicleState and currentVehicleState ~= previousVehicleState then
-                    TriggerEvent('somis-betterevents:vehicleEntered', playerId, currentVehicleState)
-                    if DEBUG then
-                        print(string.format("[VEHICLE ENTRY] Player %s (ID: %d) entered vehicle %s",
-                            playerName, playerId, currentVehicleState))
-                    end
-                elseif not currentVehicleState and previousVehicleState then
-                    TriggerEvent('somis-betterevents:vehicleExit', playerId, previousVehicleState)
-                    if DEBUG then
-                        print(string.format("[VEHICLE EXIT] Player %s (ID: %d) exited vehicle %s",
-                            playerName, playerId, previousVehicleState))
-                    end
+            local ped = playerPeds[playerId]
+            if not ped or ped == 0 or not DoesEntityExist(ped) then
+                ped = GetPlayerPed(playerId)
+                if ped == 0 or not DoesEntityExist(ped) then
+                    goto continue 
                 end
-                playerVehicleStates[playerId] = currentVehicleState
+                playerPeds[playerId] = ped
 
-                local model = GetEntityModel(ped)
-                local prevModel = playerPedModels[playerId]
 
-                if not prevModel then
-                    playerPedModels[playerId] = model
-                elseif model ~= prevModel then
-                    TriggerEvent('somis-betterevents:pedModelChange', playerId, prevModel, model)
+                if not playerPedModels[playerId] then
+                    playerPedModels[playerId] = GetEntityModel(ped)
                     if DEBUG then
-                        print(string.format(
-                            "[PED MODEL CHANGE] Player %s (ID: %d) changed model: %s → %s",
-                            playerName, playerId, prevModel, model
-                        ))
+                        print(("Cached ped %d for player %d with model %d"):format(ped, playerId, playerPedModels[playerId]))
                     end
-                    playerPedModels[playerId] = model
                 end
             end
+
+
+            local vehicle = GetVehiclePedIsIn(ped, false)
+            local currentVehicleState = vehicle ~= 0 and vehicle or nil
+            local previousVehicleState = playerVehicleStates[playerId]
+
+            if currentVehicleState and currentVehicleState ~= previousVehicleState then
+                TriggerEvent('somis-betterevents:vehicleEntered', playerId, currentVehicleState)
+                if DEBUG then
+                    print(string.format("[VEHICLE ENTRY] Player %s (ID: %d) entered vehicle %s",
+                        GetPlayerName(playerId), playerId, currentVehicleState))
+                end
+            elseif not currentVehicleState and previousVehicleState then
+                TriggerEvent('somis-betterevents:vehicleExit', playerId, previousVehicleState)
+                if DEBUG then
+                    print(string.format("[VEHICLE EXIT] Player %s (ID: %d) exited vehicle %s",
+                        GetPlayerName(playerId), playerId, previousVehicleState))
+                end
+            end
+            playerVehicleStates[playerId] = currentVehicleState
+
+
+            local model = GetEntityModel(ped)
+            local prevModel = playerPedModels[playerId]
+
+            if prevModel ~= model then
+                if prevModel then
+                    TriggerEvent('somis-betterevents:pedModelChange', playerId, prevModel, model)
+                    if DEBUG then
+                        print(string.format("[PED MODEL CHANGE] Player %s (ID: %d) changed model: %s → %s",
+                            GetPlayerName(playerId), playerId, prevModel, model))
+                    end
+                end
+                playerPedModels[playerId] = model
+            end
+
+            ::continue::
         end
-        Citizen.Wait(1000)
+        Citizen.Wait(1000) 
     end
 end)
+
 
 
 function DoesP_PedExist(playerId)
     return GetPlayerPed(playerId) ~= 0
 end
-
-
-
