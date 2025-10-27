@@ -18,3 +18,12 @@ end)
 AddEventHandler('somis-betterevents:pedModelChange', function(playerId, prevModel, model)
 
 end)
+
+
+AddEventHandler('somis-betterevents:weaponDrawn', function(playerId, currentWeapon, previousWeapon)
+
+end)
+
+AddEventHandler('somis-betterevents:weaponHolstered', function(playerId, previousWeapon)
+
+end)

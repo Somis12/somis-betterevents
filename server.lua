@@ -5,6 +5,7 @@ local recentDeaths = {}
 local playerVehicleStates = {}
 local playerPedModels = {}
 local playerPeds = {}
+local playerWeaponStates = {}
 local joined_players = {}
 
 local function debugPrint(msg)
@@ -15,6 +16,14 @@ end
 
 local function isEntityPed(entity)
     return GetEntityType(entity) == 1
+end
+
+
+local function toUnsigned32(n)
+    if n < 0 then
+        return n + 4294967296
+    end
+    return n
 end
 
 local function isPlayerDead(playerId)
@@ -38,7 +47,7 @@ RegisterNetEvent('weaponDamageEvent', function(sender, data)
 
     
     local killerId = sender or "Unknown"
-    local weapon = data.weaponType or "Unknown"
+    local weapon = toUnsigned32(data.weaponType) or "Unknown"
     debugPrint(("[Death] Player %s killed by %s with %s (Server)"):format(victimId, killerId, weapon))
     recentDeaths[victimId] = GetGameTimer()
     TriggerEvent('somis-betterevents:death', victimId, killerId, weapon)
@@ -75,6 +84,8 @@ RegisterNetEvent('playerDropped', function()
     playerVehicleStates[playerId] = nil
     playerPedModels[playerId] = nil
     playerPeds[playerId] = nil
+    playerWeaponStates[playerId] = nil
+    
 end)
 
 CreateThread(function()
@@ -82,13 +93,14 @@ CreateThread(function()
         for i = 1, #joined_players do
             local playerId = joined_players[i]
             if not playerId then
-                goto continue 
+                goto continue
             end
+
             local ped = playerPeds[playerId]
             if not ped or ped == 0 or not DoesEntityExist(ped) then
                 ped = GetPlayerPed(playerId)
                 if ped == 0 or not DoesEntityExist(ped) then
-                    goto continue 
+                    goto continue
                 end
                 playerPeds[playerId] = ped
 
@@ -97,6 +109,7 @@ CreateThread(function()
                     debugPrint(("Cached ped %d for player %d with model %d"):format(ped, playerId, playerPedModels[playerId]))
                 end
             end
+
 
             local vehicle = GetVehiclePedIsIn(ped, false)
             local currentVehicleState = vehicle ~= 0 and vehicle or nil
@@ -113,9 +126,9 @@ CreateThread(function()
             end
             playerVehicleStates[playerId] = currentVehicleState
 
+
             local model = GetEntityModel(ped)
             local prevModel = playerPedModels[playerId]
-
             if prevModel ~= model then
                 if prevModel then
                     TriggerEvent('somis-betterevents:pedModelChange', playerId, prevModel, model)
@@ -124,9 +137,25 @@ CreateThread(function()
                 end
                 playerPedModels[playerId] = model
             end
+            local currentWeapon = toUnsigned32(GetSelectedPedWeapon(ped)) 
+            local previousWeapon = playerWeaponStates[playerId]
+            if not previousWeapon then
+                playerWeaponStates[playerId] = currentWeapon
+            elseif currentWeapon ~= previousWeapon then
+                if tostring(currentWeapon) ~= "2725352035" then
+                    TriggerEvent('somis-betterevents:weaponDrawn', playerId, currentWeapon, previousWeapon)
+                    debugPrint(("[WEAPON DRAWN] Player %s (ID: %d) equipped weapon: %s (prev: %s)"):format(
+                        GetPlayerName(playerId), playerId, currentWeapon, previousWeapon))
+                else
+                    TriggerEvent('somis-betterevents:weaponHolstered', playerId, previousWeapon)
+                    debugPrint(("[WEAPON HOLSTERED] Player %s (ID: %d) holstered weapon: %s"):format(
+                        GetPlayerName(playerId), playerId, previousWeapon))
+                end
+                playerWeaponStates[playerId] = currentWeapon
+            end
 
             ::continue::
         end
-        Wait(500) 
+        Wait(500)
     end
 end)
