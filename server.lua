@@ -1,12 +1,19 @@
 local DEBUG = false
 local serv_cooldown_death = {}
 local cooldown_duration_death = 500
-local recentDeaths = {}
+local recentKills = {}
 local playerVehicleStates = {}
 local playerPedModels = {}
 local playerPeds = {}
 local playerWeaponStates = {}
+local playerVisibilityStates = {}
+local playerPedExists = {}
+local playerDeathStates = {}
 local joined_players = {}
+for _, playerId in ipairs(GetPlayers()) do
+    table.insert(joined_players, tonumber(playerId))
+end
+
 
 local function debugPrint(msg)
     if DEBUG then
@@ -48,22 +55,9 @@ RegisterNetEvent('weaponDamageEvent', function(sender, data)
     
     local killerId = sender or "Unknown"
     local weapon = toUnsigned32(data.weaponType) or "Unknown"
-    debugPrint(("[Death] Player %s killed by %s with %s (Server)"):format(victimId, killerId, weapon))
-    recentDeaths[victimId] = GetGameTimer()
-    TriggerEvent('somis-betterevents:death', victimId, killerId, weapon)
-end)
-
-RegisterNetEvent('somis-betterevents:clientReportedDeath', function()
-    local victimId = source
-    if not isPlayerDead(victimId) then return end
-    local currentTime = GetGameTimer()
-    local lastDeath = recentDeaths[victimId] or 0
-
-    if currentTime - lastDeath > 1000 then
-        debugPrint(("[Death] Player %s died (Client)"):format(victimId))
-        recentDeaths[victimId] = currentTime
-        TriggerEvent('somis-betterevents:death', victimId, nil, nil)
-    end
+    debugPrint(("[KILLED] Player %s killed by %s with %s (Server)"):format(victimId, killerId, weapon))
+    recentKills[victimId] = GetGameTimer()
+    TriggerEvent('somis-betterevents:killed', victimId, killerId, weapon)
 end)
 
 RegisterNetEvent('playerJoining', function()
@@ -85,31 +79,47 @@ RegisterNetEvent('playerDropped', function()
     playerPedModels[playerId] = nil
     playerPeds[playerId] = nil
     playerWeaponStates[playerId] = nil
-    
+    playerVisibilityStates[playerId] = nil
+    playerPedExists[playerId] = nil
+    playerDeathStates[playerId] = nil
+    recentKills[playerId] = nil
 end)
 
 CreateThread(function()
     while true do
         for i = 1, #joined_players do
             local playerId = joined_players[i]
-            if not playerId then
-                goto continue
-            end
+            if not playerId then goto continue end
 
             local ped = playerPeds[playerId]
-            if not ped or ped == 0 or not DoesEntityExist(ped) then
-                ped = GetPlayerPed(playerId)
-                if ped == 0 or not DoesEntityExist(ped) then
-                    goto continue
-                end
-                playerPeds[playerId] = ped
 
-                if not playerPedModels[playerId] then
-                    playerPedModels[playerId] = GetEntityModel(ped)
-                    debugPrint(("Cached ped %d for player %d with model %d"):format(ped, playerId, playerPedModels[playerId]))
+            if playerPedExists[playerId] == nil then
+                playerPedExists[playerId] = ped ~= 0 and DoesEntityExist(ped) or false
+            end
+
+            if not playerPedExists[playerId] then
+                ped = GetPlayerPed(playerId)
+                playerPedExists[playerId] = ped ~= 0 and DoesEntityExist(ped) or false
+                if playerPedExists[playerId] then
+                    playerPeds[playerId] = ped
+                    if not playerPedModels[playerId] then
+                        playerPedModels[playerId] = GetEntityModel(ped)
+                        debugPrint(("Cached ped %d for player %d with model %d"):format(ped, playerId, playerPedModels[playerId]))
+                    end
+                else
+                    goto continue
                 end
             end
 
+            local health = GetEntityHealth(ped)
+            local wasDead = playerDeathStates[playerId] or false
+            if health <= 0 and not wasDead then
+                TriggerEvent('somis-betterevents:death', playerId, nil, nil)
+                debugPrint(("[DEATH] Player %s (ID: %d) has died"):format(GetPlayerName(playerId), playerId))
+                playerDeathStates[playerId] = true
+            elseif health > 0 and wasDead then
+                playerDeathStates[playerId] = false 
+            end
 
             local vehicle = GetVehiclePedIsIn(ped, false)
             local currentVehicleState = vehicle ~= 0 and vehicle or nil
@@ -117,41 +127,52 @@ CreateThread(function()
 
             if currentVehicleState and currentVehicleState ~= previousVehicleState then
                 TriggerEvent('somis-betterevents:vehicleEntered', playerId, currentVehicleState)
-                debugPrint(("[VEHICLE ENTRY] Player %s (ID: %d) entered vehicle %s"):format(
-                    GetPlayerName(playerId), playerId, currentVehicleState))
+                debugPrint(("[VEHICLE ENTRY] Player %s (ID: %d) entered vehicle %s"):format(GetPlayerName(playerId), playerId, currentVehicleState))
             elseif not currentVehicleState and previousVehicleState then
                 TriggerEvent('somis-betterevents:vehicleExit', playerId, previousVehicleState)
-                debugPrint(("[VEHICLE EXIT] Player %s (ID: %d) exited vehicle %s"):format(
-                    GetPlayerName(playerId), playerId, previousVehicleState))
+                debugPrint(("[VEHICLE EXIT] Player %s (ID: %d) exited vehicle %s"):format(GetPlayerName(playerId), playerId, previousVehicleState))
             end
             playerVehicleStates[playerId] = currentVehicleState
-
 
             local model = GetEntityModel(ped)
             local prevModel = playerPedModels[playerId]
             if prevModel ~= model then
                 if prevModel then
                     TriggerEvent('somis-betterevents:pedModelChange', playerId, prevModel, model)
-                    debugPrint(("[PED MODEL CHANGE] Player %s (ID: %d) changed model: %s → %s"):format(
-                        GetPlayerName(playerId), playerId, prevModel, model))
+                    debugPrint(("[PED MODEL CHANGE] Player %s (ID: %d) changed model: %s → %s"):format(GetPlayerName(playerId), playerId, prevModel, model))
                 end
                 playerPedModels[playerId] = model
+                playerPedExists[playerId] = true
             end
-            local currentWeapon = toUnsigned32(GetSelectedPedWeapon(ped)) 
+
+            local currentWeapon = toUnsigned32(GetSelectedPedWeapon(ped))
             local previousWeapon = playerWeaponStates[playerId]
             if not previousWeapon then
                 playerWeaponStates[playerId] = currentWeapon
             elseif currentWeapon ~= previousWeapon then
                 if tostring(currentWeapon) ~= "2725352035" then
                     TriggerEvent('somis-betterevents:weaponDrawn', playerId, currentWeapon, previousWeapon)
-                    debugPrint(("[WEAPON DRAWN] Player %s (ID: %d) equipped weapon: %s (prev: %s)"):format(
-                        GetPlayerName(playerId), playerId, currentWeapon, previousWeapon))
+                    debugPrint(("[WEAPON DRAWN] Player %s (ID: %d) equipped weapon: %s (prev: %s)"):format(GetPlayerName(playerId), playerId, currentWeapon, previousWeapon))
                 else
                     TriggerEvent('somis-betterevents:weaponHolstered', playerId, previousWeapon)
-                    debugPrint(("[WEAPON HOLSTERED] Player %s (ID: %d) holstered weapon: %s"):format(
-                        GetPlayerName(playerId), playerId, previousWeapon))
+                    debugPrint(("[WEAPON HOLSTERED] Player %s (ID: %d) holstered weapon: %s"):format(GetPlayerName(playerId), playerId, previousWeapon))
                 end
                 playerWeaponStates[playerId] = currentWeapon
+            end
+
+            local isVisible = IsEntityVisible(ped)
+            local wasVisible = playerVisibilityStates[playerId]
+            if wasVisible == nil then
+                playerVisibilityStates[playerId] = isVisible
+            elseif isVisible ~= wasVisible then
+                if isVisible then
+                    TriggerEvent('somis-betterevents:becameVisible', playerId)
+                    debugPrint(("[VISIBILITY] Player %s (ID: %d) became VISIBLE"):format(GetPlayerName(playerId), playerId))
+                else
+                    TriggerEvent('somis-betterevents:becameInvisible', playerId)
+                    debugPrint(("[VISIBILITY] Player %s (ID: %d) became INVISIBLE"):format(GetPlayerName(playerId), playerId))
+                end
+                playerVisibilityStates[playerId] = isVisible
             end
 
             ::continue::
