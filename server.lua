@@ -40,7 +40,7 @@ local function isPlayerDead(playerId)
     return GetEntityHealth(ped) <= 0
 end
 
-RegisterNetEvent('weaponDamageEvent', function(sender, data)
+AddEventHandler('weaponDamageEvent', function(sender, data)
     if not data.willKill then return end
 
     local entity = NetworkGetEntityFromNetworkId(data.hitGlobalId)
@@ -60,13 +60,13 @@ RegisterNetEvent('weaponDamageEvent', function(sender, data)
     TriggerEvent('somis-betterevents:killed', victimId, killerId, weapon)
 end)
 
-RegisterNetEvent('playerJoining', function()
+AddEventHandler('playerJoining', function()
     local playerId = source
     joined_players[#joined_players + 1] = playerId
     debugPrint(("[PLAYER JOINED] Player %s (ID: %d) added to joined_players"):format(GetPlayerName(playerId), playerId))
 end)
 
-RegisterNetEvent('playerDropped', function()
+AddEventHandler('playerDropped', function()
     local playerId = source
     for i = 1, #joined_players do
         if joined_players[i] == playerId then
