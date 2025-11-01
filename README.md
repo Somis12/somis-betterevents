@@ -8,7 +8,7 @@ AddEventHandler('somis-betterevents:killed', function(victimId, killerId, weapon
 end)
 
 
-AddEventHandler('somis-betterevents:death', function(playerId)-- will be executed on any death,doesnt matter if a player got shot or fall damage
+AddEventHandler('somis-betterevents:death', function(playerId,killerId)-- will be executed on any death,doesnt matter if a player got shot or rammed by vehicle, killerid will be shown if a player was shot or rammed, but will show 0 if its none (like fall damage.)
 
 end)
 
