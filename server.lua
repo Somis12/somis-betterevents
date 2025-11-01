@@ -114,7 +114,7 @@ CreateThread(function()
             local health = GetEntityHealth(ped)
             local wasDead = playerDeathStates[playerId] or false
             if health <= 0 and not wasDead then
-                local killer = NetworkGetEntityOwner(GetPedSourceOfDeath(playerPeds[playerId])) or nil
+                local killer = NetworkGetEntityOwner(GetPedSourceOfDeath(ped)) or nil
                 TriggerEvent('somis-betterevents:death', playerId, killer)
                 debugPrint(("[DEATH] Player %s (ID: %d) has died"):format(GetPlayerName(playerId), playerId))
                 playerDeathStates[playerId] = true
@@ -180,4 +180,5 @@ CreateThread(function()
         end
         Wait(500)
     end
+
 end)
